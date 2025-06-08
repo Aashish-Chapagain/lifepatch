@@ -1,31 +1,29 @@
-compatible_donors = {
-    "O-": ["O-"],
-    "O+": ["O+", "O-"],
-    "A-": ["A-", "O-"],
-    "A+": ["A+", "A-", "O+", "O-"],
-    "B-": ["B-", "O-"],
-    "B+": ["B+", "B-", "O+", "O-"],
-    "AB-": ["AB-", "A-", "B-", "O-"],
-    "AB+": ["O-", "O+", "A-", "A+", "B-", "B+", "AB-", "AB+"]  
-}
+from pymongo import MongoClient
+from dotenv import load_dotenv
+from fastapi import HTTPException
+import os
 
+def iscompatible(location: str, blood_group: str, organ: str):
+    load_dotenv(dotenv_path=".env.local")
+    MONGODB_URI = os.getenv("MONGODB_URI")
 
+    try:
+        client = MongoClient(MONGODB_URI)
+        db = client["life_patch"]
+        collection = db["donors"]
 
-bolood_type_list = ["O-", "O+", "A-", "A+", "B-", "B+", "AB-", "AB+"]
+        query = {
+            "address": {"$regex": f"^{location}$", "$options": "i"},
+            "blood_group": {"$regex": f"^{blood_group}$", "$options": "i"},
+            "organ": {"$regex": f"^{organ}$", "$options": "i"}
+        }
 
-while True:
+        matches = list(collection.find(query))
 
- user_blood_type = input("Enter your blood type (e.g., O-, A+, B+): ").strip().upper()
- if user_blood_type not in bolood_type_list :
-   print("Invalid blood type. Please enter a valid blood type (e.g., O-, A+, B+).")
-   continue
- else : 
-   matching_donors = compatible_donors.get(user_blood_type, [])
-   print("Compatible blood donors for your type ({}) are: {}".format(user_blood_type, ", ".join(matching_donors)))
-   break
- 
+        for doc in matches:
+            doc["_id"] = str(doc["_id"])
 
+        return {"matches": matches}
 
-
-
-
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

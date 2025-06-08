@@ -9,12 +9,23 @@
         .msg { margin: 0.5rem 0; }
         .user { font-weight: bold; }
         .bot { color: green; }
+        .search-options { margin-bottom: 1rem; }
+        .search-options input { margin-right: 1rem; }
     </style>
 </head>
 <body>
     <h2>💬 Health Chatbot</h2>
     <div id="chatbox"></div>
 
+    <!-- Search form -->
+    <div class="search-options">
+        <input type="text" id="location" placeholder="Location (e.g. Butwal)">
+        <input type="text" id="blood_group" placeholder="Blood Group (e.g. O+)">
+        <input type="text" id="organ" placeholder="Organ (e.g. kidney)">
+        <button onclick="searchDonors()">🔍 Search Donors</button>
+    </div>
+
+    <!-- Chat form -->
     <form id="chat-form">
         <input type="text" id="message" placeholder="Ask a health question..." style="width: 80%;" required>
         <button type="submit">Send</button>
@@ -24,7 +35,7 @@
         const chatbox = document.getElementById("chatbox");
         const form = document.getElementById("chat-form");
         const input = document.getElementById("message");
-        const session_id = "user_1"; // Static session ID for now
+        const session_id = "user_1";
 
         form.onsubmit = async (e) => {
             e.preventDefault();
@@ -42,6 +53,39 @@
             const data = await res.json();
             addMessage("Bot", data.response, "bot");
         };
+
+        // Search handler
+        async function searchDonors() {
+            const location = document.getElementById("location").value.trim();
+            const blood_group = document.getElementById("blood_group").value.trim();
+            const organ = document.getElementById("organ").value.trim();
+
+            if (!location || !blood_group || !organ) {
+                alert("Please fill in all search fields.");
+                return;
+            }
+
+            addMessage("You", `Search donors in ${location} with blood group ${blood_group} and organ ${organ}`, "user");
+
+            const res = await fetch("/match_donors", {
+                method: "GET",
+                headers: { "Content-Type": "application/json" },
+                // send query params
+            });
+
+            const url = `/match_donors?location=${encodeURIComponent(location)}&blood_group=${encodeURIComponent(blood_group)}&organ=${encodeURIComponent(organ)}`;
+            const response = await fetch(url);
+            const data = await response.json();
+
+            if (data.matches && data.matches.length > 0) {
+                const results = data.matches.map(d =>
+                    `👤 ${d.name}, 📍 ${d.address}, 🩸 ${d.blood_group}, 🏥 Organ: ${d.organ}, 📞 ${d.phone || 'N/A'}`
+                ).join("<br>");
+                addMessage("Bot", results, "bot");
+            } else {
+                addMessage("Bot", "No matching donors found.", "bot");
+            }
+        }
 
         function addMessage(sender, text, cls) {
             const msg = document.createElement("div");
