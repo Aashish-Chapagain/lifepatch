@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Health Chatbot</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 2rem; max-width: 600px; margin: auto; }
+        #chatbox { border: 1px solid #ccc; padding: 1rem; height: 400px; overflow-y: auto; margin-bottom: 1rem; }
+        .msg { margin: 0.5rem 0; }
+        .user { font-weight: bold; }
+        .bot { color: green; }
+    </style>
+</head>
+<body>
+    <h2>💬 Health Chatbot</h2>
+    <div id="chatbox"></div>
+
+    <form id="chat-form">
+        <input type="text" id="message" placeholder="Ask a health question..." style="width: 80%;" required>
+        <button type="submit">Send</button>
+    </form>
+
+    <script>
+        const chatbox = document.getElementById("chatbox");
+        const form = document.getElementById("chat-form");
+        const input = document.getElementById("message");
+        const session_id = "user_1"; // Static session ID for now
+
+        form.onsubmit = async (e) => {
+            e.preventDefault();
+            const userMsg = input.value.trim();
+            if (!userMsg) return;
+
+            addMessage("You", userMsg, "user");
+            input.value = "";
+
+            const res = await fetch("/chat", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ session_id, message: userMsg })
+            });
+            const data = await res.json();
+            addMessage("Bot", data.response, "bot");
+        };
+
+        function addMessage(sender, text, cls) {
+            const msg = document.createElement("div");
+            msg.className = `msg ${cls}`;
+            msg.innerHTML = `<strong>${sender}:</strong> ${text}`;
+            chatbox.appendChild(msg);
+            chatbox.scrollTop = chatbox.scrollHeight;
+        }
+    </script>
+</body>
+</html>
