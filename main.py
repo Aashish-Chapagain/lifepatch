@@ -26,7 +26,6 @@ async def get_home():
     return FileResponse("static/index.html")
 
 
-# Setup chatbot model
 model = OllamaLLM(model="mistral")
 
 template = """You are an intelligent chatbot with sole purpose to reply to the health related questions asked by the users.
@@ -63,7 +62,7 @@ async def chat(req: ChatRequest):
     )
     return {"response": response}
 
-# New endpoint to handle donor search
+
 @app.get("/match_donors")
 async def match_donors(
     location: str = Query(..., description="Location to search donors in"),

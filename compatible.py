@@ -1,29 +1,54 @@
 from pymongo import MongoClient
-from dotenv import load_dotenv
 from fastapi import HTTPException
 import os
+from dotenv import load_dotenv
+
+load_dotenv(dotenv_path=".env.local")
+MONGODB_URI = os.getenv("MONGODB_URI")
+client = MongoClient(MONGODB_URI)
+db = client["life_patch"]
+collection = db["donors"]
 
 def iscompatible(location: str, blood_group: str, organ: str):
-    load_dotenv(dotenv_path=".env.local")
-    MONGODB_URI = os.getenv("MONGODB_URI")
-
     try:
-        client = MongoClient(MONGODB_URI)
-        db = client["life_patch"]
-        collection = db["donors"]
+        try:
+            lat_str, lon_str = location.split(",")
+            lat = float(lat_str.strip())
+            lon = float(lon_str.strip())
+        except Exception:
+            raise HTTPException(status_code=400, detail="Location must be in 'lat,lon' format")
 
-        query = {
-            "address": {"$regex": f"^{location}$", "$options": "i"},
-            "blood_group": {"$regex": f"^{blood_group}$", "$options": "i"},
-            "organ": {"$regex": f"^{organ}$", "$options": "i"}
+        
+        query_within_50km = {
+            "blood_group": blood_group.upper(),
+            "organ": organ.lower(),
+            "location": {
+                "$near": {
+                    "$geometry": {"type": "Point", "coordinates": [lon, lat]},
+                    "$maxDistance": 50000  
+                }
+            }
         }
+        matches_within_50km = list(collection.find(query_within_50km))
 
-        matches = list(collection.find(query))
+        ids_within_50km = [doc["_id"] for doc in matches_within_50km]
 
-        for doc in matches:
+
+        query_outside_50km = {
+            "blood_group": blood_group.upper(),
+            "organ": organ.lower(),
+            "_id": {"$nin": ids_within_50km}
+        }
+        matches_outside_50km = list(collection.find(query_outside_50km))
+
+        combined = matches_within_50km + matches_outside_50km
+
+        for doc in combined:
             doc["_id"] = str(doc["_id"])
 
-        return {"matches": matches}
+        return {"matches": combined}
 
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

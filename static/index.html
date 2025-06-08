@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
+    <meta charset="UTF-8" />
     <title>Health Chatbot</title>
     <style>
         body { font-family: Arial, sans-serif; padding: 2rem; max-width: 600px; margin: auto; }
@@ -11,23 +11,37 @@
         .bot { color: green; }
         .search-options { margin-bottom: 1rem; }
         .search-options input { margin-right: 1rem; }
+        #search-results {
+            border: 1px solid #888;
+            padding: 1rem;
+            max-height: 200px;
+            overflow-y: auto;
+            margin-bottom: 1rem;
+            background: #f9f9f9;
+        }
+        #search-results h3 {
+            margin-top: 0;
+        }
     </style>
 </head>
 <body>
     <h2>💬 Health Chatbot</h2>
-    <div id="chatbox"></div>
 
-    <!-- Search form -->
     <div class="search-options">
-        <input type="text" id="location" placeholder="Location (e.g. Butwal)">
-        <input type="text" id="blood_group" placeholder="Blood Group (e.g. O+)">
-        <input type="text" id="organ" placeholder="Organ (e.g. kidney)">
+        <input type="text" id="location" placeholder="Location (optional - allow browser location preferred)" />
+        <input type="text" id="blood_group" placeholder="Blood Group (e.g. O+)" />
+        <input type="text" id="organ" placeholder="Organ (e.g. kidney)" />
         <button onclick="searchDonors()">🔍 Search Donors</button>
     </div>
 
-    <!-- Chat form -->
+    <div id="search-results">
+      <h3>Donor Search Results</h3>
+      <div id="results-list">No search performed yet.</div>
+    </div>
+
+    <div id="chatbox"></div>
     <form id="chat-form">
-        <input type="text" id="message" placeholder="Ask a health question..." style="width: 80%;" required>
+        <input type="text" id="message" placeholder="Ask a health question..." style="width: 80%;" required />
         <button type="submit">Send</button>
     </form>
 
@@ -35,6 +49,7 @@
         const chatbox = document.getElementById("chatbox");
         const form = document.getElementById("chat-form");
         const input = document.getElementById("message");
+        const resultsList = document.getElementById("results-list");
         const session_id = "user_1";
 
         form.onsubmit = async (e) => {
@@ -42,52 +57,77 @@
             const userMsg = input.value.trim();
             if (!userMsg) return;
 
-            addMessage("You", userMsg, "user");
+            addChatMessage("You", userMsg, "user");
             input.value = "";
 
             const res = await fetch("/chat", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ session_id, message: userMsg })
+                body: JSON.stringify({ session_id, message: userMsg }),
             });
             const data = await res.json();
-            addMessage("Bot", data.response, "bot");
+            addChatMessage("Bot", data.response, "bot");
         };
 
-        // Search handler
         async function searchDonors() {
-            const location = document.getElementById("location").value.trim();
             const blood_group = document.getElementById("blood_group").value.trim();
             const organ = document.getElementById("organ").value.trim();
+            const manualLocation = document.getElementById("location").value.trim();
 
-            if (!location || !blood_group || !organ) {
-                alert("Please fill in all search fields.");
+            if (!blood_group || !organ) {
+                alert("Please fill in blood group and organ fields.");
                 return;
             }
 
-            addMessage("You", `Search donors in ${location} with blood group ${blood_group} and organ ${organ}`, "user");
-
-            const res = await fetch("/match_donors", {
-                method: "GET",
-                headers: { "Content-Type": "application/json" },
-                // send query params
-            });
-
-            const url = `/match_donors?location=${encodeURIComponent(location)}&blood_group=${encodeURIComponent(blood_group)}&organ=${encodeURIComponent(organ)}`;
-            const response = await fetch(url);
-            const data = await response.json();
-
-            if (data.matches && data.matches.length > 0) {
-                const results = data.matches.map(d =>
-                    `👤 ${d.name}, 📍 ${d.address}, 🩸 ${d.blood_group}, 🏥 Organ: ${d.organ}, 📞 ${d.phone || 'N/A'}`
-                ).join("<br>");
-                addMessage("Bot", results, "bot");
+            if (manualLocation) {
+                addChatMessage("You", `Searching donors in ${manualLocation} with blood group ${blood_group} and organ ${organ}`, "user");
+                await fetchDonors(manualLocation, blood_group, organ);
             } else {
-                addMessage("Bot", "No matching donors found.", "bot");
+                if (!navigator.geolocation) {
+                    alert("Geolocation is not supported by your browser. Please enter location manually.");
+                    return;
+                }
+
+                navigator.geolocation.getCurrentPosition(async (position) => {
+                    const lat = position.coords.latitude;
+                    const lon = position.coords.longitude;
+                    const location = `${lat},${lon}`;
+
+                    addChatMessage("You", `Searching donors near your location (lat: ${lat.toFixed(4)}, lon: ${lon.toFixed(4)}) with blood group ${blood_group} and organ ${organ}`, "user");
+                    await fetchDonors(location, blood_group, organ);
+                }, () => {
+                    alert("Unable to retrieve your location. Please allow location access or enter manually.");
+                });
             }
         }
 
-        function addMessage(sender, text, cls) {
+        async function fetchDonors(location, blood_group, organ) {
+            const url = `/match_donors?location=${encodeURIComponent(location)}&blood_group=${encodeURIComponent(blood_group)}&organ=${encodeURIComponent(organ)}`;
+            try {
+                const response = await fetch(url);
+                const data = await response.json();
+
+                if (data.matches && data.matches.length > 0) {
+                    resultsList.innerHTML = data.matches
+                        .map(d =>
+                            `<div>
+                                <strong>${d.name || "Unknown"}</strong><br/>
+                                Location: ${d.address}<br/>
+                                Blood Group: ${d.blood_group}<br/>
+                                Organ: ${d.organ}<br/>
+                                Phone: ${d.phone || "N/A"}
+                            </div><hr>`
+                        )
+                        .join("");
+                } else {
+                    resultsList.innerHTML = "<p>No matching donors found.</p>";
+                }
+            } catch (err) {
+                resultsList.innerHTML = `<p style="color:red;">Error fetching data: ${err.message}</p>`;
+            }
+        }
+
+        function addChatMessage(sender, text, cls) {
             const msg = document.createElement("div");
             msg.className = `msg ${cls}`;
             msg.innerHTML = `<strong>${sender}:</strong> ${text}`;
